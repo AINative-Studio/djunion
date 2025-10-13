@@ -1,14 +1,29 @@
 {
-  "name": "nextjs",
+  "name": "djunion",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:init": "./scripts/db-init.sh",
+    "db:reset": "./scripts/db-reset.sh",
+    "db:backup": "./scripts/db-backup.sh",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@prisma/client": "^5.7.0",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-alert-dialog": "^1.1.1",
@@ -66,5 +81,11 @@
     "typescript": "^5.6.0",
     "vaul": "^0.9.9",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "prisma": "^5.7.0",
+    "tsx": "^4.7.0",
+    "@types/bcrypt": "^5.0.2",
+    "bcrypt": "^5.1.1"
   }
 }

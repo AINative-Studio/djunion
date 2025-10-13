@@ -1,0 +1,108 @@
+{
+  "dashboard": {
+    "title": "DJ Union API Metrics",
+    "tags": ["djunion", "api", "nestjs"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate (req/s)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{app=\"djunion-api\"}[5m])",
+            "legendFormat": "{{method}} {{route}} - {{status_code}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Response Time (p95)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{app=\"djunion-api\"}[5m]))",
+            "legendFormat": "{{method}} {{route}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate (4xx/5xx)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{app=\"djunion-api\", status_code=~\"4..|5..\"}[5m])",
+            "legendFormat": "{{status_code}} {{route}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{app=\"djunion-api\"}[5m]) * 100",
+            "legendFormat": "{{kubernetes_pod_name}}"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Memory Usage (MB)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{app=\"djunion-api\"} / 1024 / 1024",
+            "legendFormat": "{{kubernetes_pod_name}}"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Active Streams Count",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "count(up{app=\"djunion-relay-worker\"} == 1)",
+            "legendFormat": "Active Streams"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Database Connection Pool",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends{datname=\"djunion_production\"}",
+            "legendFormat": "Active Connections"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Redis Operations Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "rate(redis_commands_processed_total[5m])",
+            "legendFormat": "Commands/sec"
+          }
+        ]
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 16,
+    "version": 1
+  }
+}

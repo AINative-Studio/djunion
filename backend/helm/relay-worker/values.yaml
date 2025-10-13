@@ -1,0 +1,128 @@
+# Default values for djunion-relay-worker
+# This chart creates a deployment per stream dynamically
+
+image:
+  repository: djunion/relay-worker
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# Resource limits per relay worker pod
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# No autoscaling for relay workers - one pod per stream
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - djunion-relay-worker
+          topologyKey: kubernetes.io/hostname
+
+livenessProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -c
+      - pgrep -f "node.*relay" > /dev/null
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  exec:
+    command:
+      - /bin/sh
+      - -c
+      - pgrep -f "node.*relay" > /dev/null
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Environment variables for relay worker
+env:
+  - name: NODE_ENV
+    value: "production"
+  - name: HEARTBEAT_INTERVAL
+    value: "30000"
+  - name: HLS_SEGMENT_DURATION
+    value: "6"
+  - name: STREAM_RECONNECT_ATTEMPTS
+    value: "5"
+  - name: STREAM_RECONNECT_DELAY
+    value: "5000"
+
+# Stream-specific configuration (set dynamically per deployment)
+stream:
+  id: ""
+  shoutcastUrl: ""
+  mount: ""
+  streamKey: ""
+
+# API server configuration
+api:
+  baseUrl: "http://djunion-api.audio-api-staging.svc.cluster.local"
+  heartbeatPath: "/v1/streams"
+
+# S3 configuration for HLS segments
+s3:
+  endpoint: ""
+  accessKey: ""
+  secretKey: ""
+  bucket: "djunion-streams"
+  region: "us-east-1"
+
+# Redis for state management
+redis:
+  url: ""
+
+environment: staging

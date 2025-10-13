@@ -1,0 +1,433 @@
+// DJ Union - Complete Database Schema
+// PostgreSQL Database with Prisma ORM
+// Generated: 2025-10-12
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 1. USER MANAGEMENT
+// ============================================================================
+
+model User {
+  userId       String   @id @default(dbgenerated("gen_random_uuid()")) @map("user_id") @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  name         String   @db.VarChar(100)
+  role         UserRole
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  streams         Stream[]
+  uploads         Upload[]
+  playlists       Playlist[]
+  podcasts        Podcast[]
+  subscriptions   Subscription[]
+  domains         Domain[]
+  refreshTokens   RefreshToken[]
+  passwordResets  PasswordReset[]
+
+  @@map("users")
+  @@index([email])
+}
+
+enum UserRole {
+  dj
+  admin
+
+  @@map("user_role")
+}
+
+// ============================================================================
+// 2. AUTHENTICATION TOKENS
+// ============================================================================
+
+model RefreshToken {
+  tokenId      String   @id @default(dbgenerated("gen_random_uuid()")) @map("token_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  refreshToken String   @map("refresh_token") @db.Text
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordReset {
+  resetId    String   @id @default(dbgenerated("gen_random_uuid()")) @map("reset_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  resetToken String   @unique @map("reset_token") @db.VarChar(100)
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("password_resets")
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// 3. LIVE STREAMING
+// ============================================================================
+
+model Stream {
+  streamId            String     @id @default(dbgenerated("gen_random_uuid()")) @map("stream_id") @db.Uuid
+  userId              String     @map("user_id") @db.Uuid
+  name                String     @db.VarChar(150)
+  shoutcastUrl        String     @map("shoutcast_url") @db.Text
+  mount               String     @db.VarChar(100)
+  streamKeyEnc        String     @map("stream_key_enc") @db.Text
+  genre               String?    @db.VarChar(50)
+  description         String?    @db.Text
+  visibility          Visibility
+  monetizationEnabled Boolean    @default(false) @map("monetization_enabled")
+  enabled             Boolean    @default(true)
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt           DateTime?  @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  user      User        @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  ads       StreamAd[]
+  analytics Analytics[]
+
+  @@map("streams")
+  @@index([userId])
+  @@index([visibility])
+  @@index([enabled])
+}
+
+model StreamAd {
+  adId            String   @id @default(dbgenerated("gen_random_uuid()")) @map("ad_id") @db.Uuid
+  streamId        String   @map("stream_id") @db.Uuid
+  positionSeconds Int      @map("position_seconds")
+  durationSeconds Int      @map("duration_seconds")
+  adType          AdType   @map("ad_type")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  stream Stream @relation(fields: [streamId], references: [streamId], onDelete: Cascade)
+
+  @@map("streams_ads")
+  @@index([streamId, positionSeconds])
+}
+
+enum AdType {
+  pre_roll  @map("pre-roll")
+  mid_roll  @map("mid-roll")
+  post_roll @map("post-roll")
+
+  @@map("ad_type")
+}
+
+// ============================================================================
+// 4. FILE UPLOADS & HLS TRANSCODING
+// ============================================================================
+
+model Upload {
+  uploadId     String        @id @default(dbgenerated("gen_random_uuid()")) @map("upload_id") @db.Uuid
+  userId       String        @map("user_id") @db.Uuid
+  filePath     String        @map("file_path") @db.Text
+  status       UploadStatus
+  errorMessage String?       @map("error_message") @db.Text
+  title        String?       @db.VarChar(150)
+  artist       String?       @db.VarChar(100)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  completedAt  DateTime?     @map("completed_at") @db.Timestamptz
+  deletedAt    DateTime?     @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  user        User         @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  hlsSegments HlsSegment[]
+  tracks      Track[]
+  episodes    Episode[]
+
+  @@map("uploads")
+  @@index([userId])
+  @@index([status])
+}
+
+enum UploadStatus {
+  processing
+  ready
+  failed
+
+  @@map("upload_status")
+}
+
+model HlsSegment {
+  segmentId       String   @id @default(dbgenerated("gen_random_uuid()")) @map("segment_id") @db.Uuid
+  uploadId        String   @map("upload_id") @db.Uuid
+  sequenceIndex   Int      @map("sequence_index")
+  tsPath          String   @map("ts_path") @db.Text
+  durationSeconds Decimal  @map("duration_seconds") @db.Decimal(5, 2)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  upload Upload @relation(fields: [uploadId], references: [uploadId], onDelete: Cascade)
+
+  @@unique([uploadId, sequenceIndex])
+  @@map("hls_segments")
+  @@index([uploadId, sequenceIndex])
+}
+
+// ============================================================================
+// 5. ON-DEMAND PLAYLISTS
+// ============================================================================
+
+model Playlist {
+  playlistId          String     @id @default(dbgenerated("gen_random_uuid()")) @map("playlist_id") @db.Uuid
+  userId              String     @map("user_id") @db.Uuid
+  title               String     @db.VarChar(150)
+  description         String?    @db.Text
+  visibility          Visibility
+  monetizationEnabled Boolean    @default(false) @map("monetization_enabled")
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt           DateTime?  @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  user      User        @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  tracks    Track[]
+  analytics Analytics[]
+
+  @@map("playlists")
+  @@index([userId])
+  @@index([visibility])
+}
+
+model Track {
+  trackId         String      @id @default(dbgenerated("gen_random_uuid()")) @map("track_id") @db.Uuid
+  playlistId      String      @map("playlist_id") @db.Uuid
+  sourceType      SourceType  @map("source_type")
+  uploadId        String?     @map("upload_id") @db.Uuid
+  url             String?     @db.Text
+  title           String      @db.VarChar(150)
+  artist          String?     @db.VarChar(100)
+  durationSeconds Int         @map("duration_seconds")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt       DateTime?   @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [playlistId], onDelete: Cascade)
+  upload   Upload?  @relation(fields: [uploadId], references: [uploadId], onDelete: SetNull)
+
+  @@map("tracks")
+  @@index([playlistId])
+}
+
+enum SourceType {
+  upload
+  external
+
+  @@map("source_type")
+}
+
+enum Visibility {
+  public
+  private
+
+  @@map("visibility")
+}
+
+// ============================================================================
+// 6. PODCAST HOSTING
+// ============================================================================
+
+model Podcast {
+  podcastId           String     @id @default(dbgenerated("gen_random_uuid()")) @map("podcast_id") @db.Uuid
+  userId              String     @map("user_id") @db.Uuid
+  title               String     @db.VarChar(150)
+  description         String?    @db.Text
+  language            String     @db.VarChar(10)
+  author              String     @db.VarChar(100)
+  imageUrl            String?    @map("image_url") @db.Text
+  explicit            Boolean    @default(false)
+  customDomain        String?    @unique @map("custom_domain") @db.VarChar(255)
+  monetizationEnabled Boolean    @default(false) @map("monetization_enabled")
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt           DateTime?  @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  user      User        @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  episodes  Episode[]
+  analytics Analytics[]
+
+  @@map("podcasts")
+  @@index([userId])
+  @@index([customDomain])
+}
+
+model Episode {
+  episodeId            String      @id @default(dbgenerated("gen_random_uuid()")) @map("episode_id") @db.Uuid
+  podcastId            String      @map("podcast_id") @db.Uuid
+  sourceType           SourceType  @map("source_type")
+  uploadId             String?     @map("upload_id") @db.Uuid
+  mediaUrl             String?     @map("media_url") @db.Text
+  title                String      @db.VarChar(150)
+  description          String?     @db.Text
+  durationSeconds      Int         @map("duration_seconds")
+  publicationDate      DateTime    @map("publication_date") @db.Timestamptz
+  episodeNumber        Int         @map("episode_number")
+  explicit             Boolean     @default(false)
+  monetizationRequired Boolean     @default(false) @map("monetization_required")
+  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt            DateTime?   @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  podcast Podcast @relation(fields: [podcastId], references: [podcastId], onDelete: Cascade)
+  upload  Upload? @relation(fields: [uploadId], references: [uploadId], onDelete: SetNull)
+
+  @@unique([podcastId, episodeNumber])
+  @@map("episodes")
+  @@index([podcastId, publicationDate(sort: Desc)])
+}
+
+// ============================================================================
+// 7. CUSTOM DOMAINS
+// ============================================================================
+
+model Domain {
+  domainId            String             @id @default(dbgenerated("gen_random_uuid()")) @map("domain_id") @db.Uuid
+  userId              String             @map("user_id") @db.Uuid
+  customDomain        String             @unique @map("custom_domain") @db.VarChar(255)
+  verificationStatus  VerificationStatus @map("verification_status")
+  tlsStatus           TlsStatus          @map("tls_status")
+  dnsChallengeRecord  String?            @map("dns_challenge_record") @db.VarChar(255)
+  verifiedAt          DateTime?          @map("verified_at") @db.Timestamptz
+  tlsIssuedAt         DateTime?          @map("tls_issued_at") @db.Timestamptz
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt           DateTime?          @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("domains")
+  @@index([userId])
+  @@index([customDomain])
+}
+
+enum VerificationStatus {
+  pending
+  verified
+  failed
+
+  @@map("verification_status")
+}
+
+enum TlsStatus {
+  pending
+  issued
+  failed
+
+  @@map("tls_status")
+}
+
+// ============================================================================
+// 8. ANALYTICS
+// ============================================================================
+
+model Analytics {
+  analyticsId  String        @id @default(dbgenerated("gen_random_uuid()")) @map("analytics_id") @db.Uuid
+  resourceType ResourceType  @map("resource_type")
+  resourceId   String        @map("resource_id") @db.Uuid
+  date         DateTime      @db.Date
+  metric       String        @db.VarChar(20)
+  value        Int
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Polymorphic relations (manual validation required)
+  stream   Stream?   @relation(fields: [resourceId], references: [streamId], onDelete: Cascade)
+  playlist Playlist? @relation(fields: [resourceId], references: [playlistId], onDelete: Cascade)
+  podcast  Podcast?  @relation(fields: [resourceId], references: [podcastId], onDelete: Cascade)
+
+  @@unique([resourceType, resourceId, date, metric])
+  @@map("analytics")
+  @@index([resourceType, resourceId, date])
+}
+
+enum ResourceType {
+  stream
+  playlist
+  podcast
+
+  @@map("resource_type")
+}
+
+// ============================================================================
+// 9. MONETIZATION
+// ============================================================================
+
+model MonetizationPlan {
+  planId          String            @id @default(dbgenerated("gen_random_uuid()")) @map("plan_id") @db.Uuid
+  name            String            @db.VarChar(100)
+  stripeProductId String            @unique @map("stripe_product_id") @db.VarChar(100)
+  stripePriceId   String            @unique @map("stripe_price_id") @db.VarChar(100)
+  priceCents      Int               @map("price_cents")
+  currency        String            @db.VarChar(3)
+  billingInterval BillingInterval   @map("billing_interval")
+  features        Json?
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt       DateTime?         @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  subscriptions Subscription[]
+
+  @@map("monetization_plans")
+  @@index([stripeProductId])
+  @@index([stripePriceId])
+}
+
+enum BillingInterval {
+  monthly
+  yearly
+
+  @@map("billing_interval")
+}
+
+model Subscription {
+  subscriptionId       String              @id @default(dbgenerated("gen_random_uuid()")) @map("subscription_id") @db.Uuid
+  planId               String              @map("plan_id") @db.Uuid
+  userId               String              @map("user_id") @db.Uuid
+  stripeSubscriptionId String              @map("stripe_subscription_id") @db.VarChar(100)
+  status               SubscriptionStatus
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt            DateTime?           @map("expires_at") @db.Timestamptz
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt            DateTime?           @map("deleted_at") @db.Timestamptz
+
+  // Relations
+  plan MonetizationPlan @relation(fields: [planId], references: [planId], onDelete: Cascade)
+  user User             @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([userId, planId])
+  @@map("subscriptions")
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  canceled
+  unpaid
+  trialing
+
+  @@map("subscription_status")
+}

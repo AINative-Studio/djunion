@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "djunion-api.fullname" . }}-config
+  labels:
+    {{- include "djunion-api.labels" . | nindent 4 }}
+data:
+  s3-endpoint: {{ .Values.secrets.s3.endpoint | quote }}
+  s3-bucket: {{ .Values.secrets.s3.bucket | quote }}
+  s3-region: {{ .Values.secrets.s3.region | quote }}
+  cors-origins: {{ .Values.config.corsOrigins | quote }}
+  rate-limit-window: {{ .Values.config.rateLimitWindow | quote }}
+  rate-limit-max: {{ .Values.config.rateLimitMax | quote }}
+  upload-max-size: {{ .Values.config.uploadMaxSize | quote }}
+  environment: {{ .Values.environment | quote }}

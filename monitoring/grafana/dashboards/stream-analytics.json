@@ -1,0 +1,316 @@
+{
+  "dashboard": {
+    "title": "DJ Union - Stream Analytics",
+    "tags": ["streams", "analytics", "djunion"],
+    "timezone": "browser",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total Active Streams",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "active_streams_total",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "text": {},
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 50, "color": "yellow" },
+                { "value": 80, "color": "red" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Total Listeners",
+        "type": "stat",
+        "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "sum(stream_listener_count)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Average Listeners per Stream",
+        "type": "stat",
+        "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "avg(stream_listener_count)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Stream Uptime %",
+        "type": "gauge",
+        "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "(sum(rate(stream_uptime_seconds_total[24h])) / (count(stream_uptime_seconds_total) * 86400)) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 90, "color": "yellow" },
+                { "value": 95, "color": "green" }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Listener Count by Stream (Top 10)",
+        "type": "bargauge",
+        "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "topk(10, stream_listener_count)",
+            "legendFormat": "{{stream_name}}",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "max": 1000,
+            "min": 0
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Listener Trends (Last 6 Hours)",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(stream_listener_count) by (stream_id)",
+            "legendFormat": "Stream {{stream_id}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Listeners"
+          }
+        ],
+        "legend": {
+          "show": true,
+          "values": true,
+          "current": true,
+          "max": true
+        }
+      },
+      {
+        "id": 7,
+        "title": "Stream Heartbeats (Rate)",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(stream_heartbeat_total[5m])) by (stream_id)",
+            "legendFormat": "Stream {{stream_id}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ops",
+            "label": "Heartbeats/sec"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Stream Errors",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(stream_errors_total[5m])) by (error_type)",
+            "legendFormat": "{{error_type}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ops",
+            "label": "Errors/sec"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [1],
+                "type": "gt"
+              },
+              "operator": { "type": "and" },
+              "query": { "params": ["A", "5m", "now"] },
+              "reducer": { "params": [], "type": "avg" },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "60s",
+          "handler": 1,
+          "name": "Stream Errors Detected",
+          "noDataState": "no_data"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Stream Bitrate Distribution",
+        "type": "graph",
+        "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "stream_bitrate_kbps",
+            "legendFormat": "Stream {{stream_id}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "Kbits",
+            "label": "Bitrate"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Stream Events (Start/Stop)",
+        "type": "graph",
+        "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(stream_events_total[5m])) by (event_type)",
+            "legendFormat": "{{event_type}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ops",
+            "label": "Events/sec"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Geographic Distribution (Mock)",
+        "type": "geomap",
+        "gridPos": { "x": 0, "y": 28, "w": 24, "h": 12 },
+        "targets": [
+          {
+            "expr": "sum(stream_listener_count) by (country)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "view": {
+            "id": "coords",
+            "lat": 40,
+            "lon": 0,
+            "zoom": 2
+          },
+          "controls": {
+            "showZoom": true,
+            "showAttribution": true
+          },
+          "basemap": {
+            "type": "default"
+          }
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "stream",
+          "type": "query",
+          "query": "label_values(stream_listener_count, stream_id)",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "hide": 0,
+          "includeAll": true,
+          "multi": true,
+          "options": [],
+          "refresh": 1
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]
+    }
+  }
+}

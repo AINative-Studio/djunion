@@ -1,0 +1,48 @@
+# FFmpeg Transcoder Worker for audio file processing
+FROM jrottenberg/ffmpeg:6.0-alpine AS ffmpeg-base
+
+# Add Node.js for job processing
+FROM node:18-alpine AS production
+
+# Copy FFmpeg from base image
+COPY --from=ffmpeg-base /usr/local /usr/local
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    dumb-init \
+    python3 \
+    && addgroup -g 1001 -S nodejs \
+    && adduser -S transcoder -u 1001
+
+WORKDIR /app
+
+# Copy transcoder worker files
+COPY --chown=transcoder:nodejs package*.json ./
+COPY --chown=transcoder:nodejs src/transcoder ./src/transcoder
+
+# Install dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Environment variables
+ENV NODE_ENV=production \
+    FFMPEG_THREADS=2 \
+    HLS_SEGMENT_DURATION=10 \
+    AUDIO_BITRATE=128k
+
+# Create working directories
+RUN mkdir -p /tmp/transcode/input /tmp/transcode/output && \
+    chown -R transcoder:nodejs /tmp/transcode
+
+# Switch to non-root user
+USER transcoder
+
+# Health check (check if FFmpeg is available)
+HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=2 \
+    CMD ffmpeg -version || exit 1
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start transcoder worker
+CMD ["node", "src/transcoder/worker.js"]

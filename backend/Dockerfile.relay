@@ -1,0 +1,60 @@
+# Relay Worker Docker Image for Shoutcast/Icecast streaming
+FROM node:18-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig*.json ./
+
+# Install dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy relay worker source
+COPY src/relay-worker ./src/relay-worker
+
+# Build relay worker
+RUN npm run build:relay
+
+# Production stage
+FROM node:18-alpine AS production
+
+# Install FFmpeg and runtime dependencies
+RUN apk add --no-cache \
+    ffmpeg \
+    dumb-init \
+    curl \
+    && addgroup -g 1001 -S nodejs \
+    && adduser -S relay -u 1001
+
+WORKDIR /app
+
+# Copy built application
+COPY --chown=relay:nodejs --from=builder /app/node_modules ./node_modules
+COPY --chown=relay:nodejs --from=builder /app/dist ./dist
+COPY --chown=relay:nodejs --from=builder /app/package*.json ./
+
+# Environment variables
+ENV NODE_ENV=production \
+    HEARTBEAT_INTERVAL=30000 \
+    HLS_SEGMENT_DURATION=6
+
+# Create directories for HLS segments
+RUN mkdir -p /tmp/hls && chown relay:nodejs /tmp/hls
+
+# Switch to non-root user
+USER relay
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD pgrep -f "node.*relay" > /dev/null || exit 1
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start relay worker
+CMD ["node", "dist/relay-worker/main.js"]

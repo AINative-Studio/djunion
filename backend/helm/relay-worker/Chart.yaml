@@ -1,0 +1,17 @@
+apiVersion: v2
+name: djunion-relay-worker
+description: DJ Union Relay Worker for Shoutcast/Icecast streaming
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - audio
+  - streaming
+  - relay
+  - shoutcast
+  - icecast
+maintainers:
+  - name: DJ Union Team
+    email: devops@djunion.com
+sources:
+  - https://github.com/AINative-Studio/djunion

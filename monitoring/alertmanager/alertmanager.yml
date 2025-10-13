@@ -1,0 +1,221 @@
+# AlertManager Configuration for DJ Union
+# Alert routing and notification management
+
+global:
+  resolve_timeout: 5m
+  slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+# Templates for notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route tree for alerts
+route:
+  # Default receiver for all alerts
+  receiver: 'default'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'cluster', 'service']
+
+  # Wait before sending initial notification
+  group_wait: 30s
+
+  # Wait before sending notification about new alerts in group
+  group_interval: 5m
+
+  # Wait before re-sending notification if alert is still firing
+  repeat_interval: 4h
+
+  # Child routes with specific handling
+  routes:
+    # Critical alerts - immediate notification
+    - receiver: 'critical-alerts'
+      match:
+        severity: critical
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: true
+
+    # API-related alerts
+    - receiver: 'api-team'
+      match:
+        component: api
+      group_by: ['alertname', 'route']
+      continue: false
+
+    # Database alerts
+    - receiver: 'database-team'
+      match:
+        component: database
+      continue: false
+
+    # Stream monitoring alerts
+    - receiver: 'stream-team'
+      match:
+        component: stream
+      continue: false
+
+    # Security alerts - immediate notification
+    - receiver: 'security-team'
+      match:
+        component: security
+      group_wait: 10s
+      repeat_interval: 15m
+      continue: true
+
+    # System resource alerts
+    - receiver: 'devops-team'
+      match:
+        component: system
+      continue: false
+
+    # Business metrics alerts (informational)
+    - receiver: 'product-team'
+      match:
+        component: business
+      group_wait: 5m
+      repeat_interval: 24h
+
+# Inhibition rules
+inhibit_rules:
+  # Inhibit warning if critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']
+
+  # If API is down, don't alert on individual endpoints
+  - source_match:
+      alertname: 'APIUnavailable'
+    target_match_re:
+      alertname: '.*Latency|.*ErrorRate'
+    equal: ['cluster']
+
+  # If database is down, don't alert on connection pool
+  - source_match:
+      alertname: 'PostgreSQLDown'
+    target_match_re:
+      alertname: 'DBConnection.*'
+    equal: ['cluster']
+
+  # If all streams are down, don't alert on individual streams
+  - source_match:
+      alertname: 'AllStreamsDown'
+    target_match:
+      alertname: 'StreamHeartbeatMissing'
+    equal: ['cluster']
+
+# Receivers (notification destinations)
+receivers:
+  # Default receiver
+  - name: 'default'
+    slack_configs:
+      - channel: '#alerts'
+        title: '{{ template "slack.default.title" . }}'
+        text: '{{ template "slack.default.text" . }}'
+        send_resolved: true
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+  # Critical alerts - PagerDuty + Slack
+  - name: 'critical-alerts'
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ template "pagerduty.default.description" . }}'
+        severity: 'critical'
+    slack_configs:
+      - channel: '#critical-alerts'
+        title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+        color: 'danger'
+
+  # API team alerts
+  - name: 'api-team'
+    email_configs:
+      - to: 'api-team@djunion.com'
+        from: 'alerts@djunion.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: 'alerts@djunion.com'
+        auth_password: 'YOUR_PASSWORD'
+        headers:
+          Subject: '{{ template "email.default.subject" . }}'
+        html: '{{ template "email.default.html" . }}'
+    slack_configs:
+      - channel: '#api-alerts'
+        send_resolved: true
+
+  # Database team alerts
+  - name: 'database-team'
+    email_configs:
+      - to: 'database-team@djunion.com'
+        from: 'alerts@djunion.com'
+    slack_configs:
+      - channel: '#database-alerts'
+        send_resolved: true
+
+  # Stream team alerts
+  - name: 'stream-team'
+    email_configs:
+      - to: 'stream-team@djunion.com'
+        from: 'alerts@djunion.com'
+    slack_configs:
+      - channel: '#stream-alerts'
+        send_resolved: true
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+
+  # Security team alerts (immediate)
+  - name: 'security-team'
+    pagerduty_configs:
+      - service_key: 'YOUR_SECURITY_PAGERDUTY_KEY'
+        severity: 'critical'
+    email_configs:
+      - to: 'security@djunion.com'
+        from: 'security-alerts@djunion.com'
+        headers:
+          Subject: 'SECURITY ALERT: {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - channel: '#security-alerts'
+        send_resolved: true
+        color: 'danger'
+
+  # DevOps team alerts
+  - name: 'devops-team'
+    email_configs:
+      - to: 'devops@djunion.com'
+        from: 'alerts@djunion.com'
+    slack_configs:
+      - channel: '#devops-alerts'
+        send_resolved: true
+
+  # Product team alerts (informational)
+  - name: 'product-team'
+    slack_configs:
+      - channel: '#product-metrics'
+        send_resolved: false
+        color: 'good'
+
+# Time-based silences (maintenance windows)
+time_intervals:
+  - name: weekdays-business-hours
+    time_intervals:
+      - times:
+          - start_time: '09:00'
+            end_time: '17:00'
+        weekdays: ['monday:friday']
+
+  - name: weekends
+    time_intervals:
+      - weekdays: ['saturday', 'sunday']
+
+# Mute configurations
+mute_time_intervals:
+  # Don't page for warning alerts outside business hours
+  - name: 'warning-alerts-off-hours'
+    time_intervals:
+      - times:
+          - start_time: '18:00'
+            end_time: '08:00'
+        weekdays: ['monday:friday']
+      - weekdays: ['saturday', 'sunday']

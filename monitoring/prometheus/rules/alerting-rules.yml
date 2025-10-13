@@ -1,0 +1,436 @@
+# Prometheus Alerting Rules for DJ Union
+# Critical metrics monitoring and alerting
+
+groups:
+  # API Performance Alerts
+  - name: api_performance
+    interval: 30s
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          (sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(http_requests_total[5m]))) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High API error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+          runbook_url: "https://docs.djunion.com/runbooks/high-error-rate"
+
+      # High API latency
+      - alert: HighAPILatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, route)
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High API latency on {{ $labels.route }}"
+          description: "P95 latency is {{ $value }}s (threshold: 1s)"
+
+      # API unavailable
+      - alert: APIUnavailable
+        expr: up{job="api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API service is down"
+          description: "API service {{ $labels.instance }} has been down for more than 1 minute"
+          runbook_url: "https://docs.djunion.com/runbooks/api-unavailable"
+
+      # High request rate
+      - alert: HighRequestRate
+        expr: |
+          sum(rate(http_requests_total[5m])) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Unusually high request rate"
+          description: "Request rate is {{ $value }} req/s (threshold: 1000 req/s)"
+
+  # Stream Monitoring Alerts
+  - name: stream_monitoring
+    interval: 30s
+    rules:
+      # Stream errors
+      - alert: StreamErrors
+        expr: |
+          sum(rate(stream_errors_total[5m])) by (stream_id, error_type) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: stream
+        annotations:
+          summary: "Stream {{ $labels.stream_id }} experiencing errors"
+          description: "Error type: {{ $labels.error_type }}, rate: {{ $value }} errors/s"
+
+      # No stream heartbeats
+      - alert: StreamHeartbeatMissing
+        expr: |
+          time() - stream_listener_count > 120
+        for: 2m
+        labels:
+          severity: critical
+          component: stream
+        annotations:
+          summary: "Stream {{ $labels.stream_id }} heartbeat missing"
+          description: "No heartbeat received for more than 2 minutes"
+          runbook_url: "https://docs.djunion.com/runbooks/stream-heartbeat-missing"
+
+      # High listener count (potential DDoS)
+      - alert: UnusualListenerCount
+        expr: |
+          stream_listener_count > 10000
+        for: 5m
+        labels:
+          severity: warning
+          component: stream
+        annotations:
+          summary: "Unusual listener count on stream {{ $labels.stream_id }}"
+          description: "Listener count: {{ $value }} (threshold: 10000)"
+
+      # All streams down
+      - alert: AllStreamsDown
+        expr: |
+          active_streams_total == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: stream
+        annotations:
+          summary: "All streams are down"
+          description: "No active streams detected for more than 5 minutes"
+
+  # Database Alerts
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # High database connection pool utilization
+      - alert: HighDBConnectionPoolUtilization
+        expr: |
+          (db_connection_pool_in_use / db_connection_pool_size) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High database connection pool utilization"
+          description: "Connection pool utilization: {{ $value }}% (threshold: 80%)"
+
+      # Database connection pool exhausted
+      - alert: DBConnectionPoolExhausted
+        expr: |
+          db_connection_pool_available == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection pool exhausted"
+          description: "No available database connections"
+          runbook_url: "https://docs.djunion.com/runbooks/db-pool-exhausted"
+
+      # Slow database queries
+      - alert: SlowDatabaseQueries
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(db_query_duration_seconds_bucket[5m])) by (le, query_type)
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "{{ $labels.query_type }} P95 latency: {{ $value }}s (threshold: 1s)"
+
+      # High database error rate
+      - alert: HighDBErrorRate
+        expr: |
+          sum(rate(db_query_errors_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "High database error rate"
+          description: "Error rate: {{ $value }} errors/s"
+
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL instance {{ $labels.instance }} has been down for more than 1 minute"
+
+  # Redis Alerts
+  - name: redis_alerts
+    interval: 30s
+    rules:
+      # Redis high memory usage
+      - alert: RedisHighMemoryUsage
+        expr: |
+          redis_memory_usage_bytes > 1073741824  # 1GB
+        for: 10m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Memory usage: {{ $value | humanizeBytes }} (threshold: 1GB)"
+
+      # Redis connection failed
+      - alert: RedisConnectionFailed
+        expr: |
+          redis_connection_status == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "Redis connection failed"
+          description: "Unable to connect to Redis"
+          runbook_url: "https://docs.djunion.com/runbooks/redis-connection-failed"
+
+      # Redis down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance {{ $labels.instance }} has been down for more than 1 minute"
+
+  # Upload Processing Alerts
+  - name: upload_processing
+    interval: 30s
+    rules:
+      # High upload failure rate
+      - alert: HighUploadFailureRate
+        expr: |
+          (sum(rate(upload_processing_status_total{status="failed"}[5m]))
+          / sum(rate(upload_processing_status_total[5m]))) * 100 > 10
+        for: 10m
+        labels:
+          severity: warning
+          component: upload
+        annotations:
+          summary: "High upload processing failure rate"
+          description: "Failure rate: {{ $value }}% (threshold: 10%)"
+
+      # Long upload processing time
+      - alert: LongUploadProcessingTime
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(upload_processing_duration_seconds_bucket[5m])) by (le)
+          ) > 300  # 5 minutes
+        for: 15m
+        labels:
+          severity: warning
+          component: upload
+        annotations:
+          summary: "Long upload processing time"
+          description: "P95 processing time: {{ $value }}s (threshold: 300s)"
+
+      # Transcoding queue backlog
+      - alert: TranscodingQueueBacklog
+        expr: |
+          transcoding_queue_length > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: upload
+        annotations:
+          summary: "Transcoding queue backlog"
+          description: "Queue length: {{ $value }} (threshold: 100)"
+
+  # System Resource Alerts
+  - name: system_resources
+    interval: 30s
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          sum(rate(container_cpu_usage_seconds_total{namespace="djunion"}[5m])) by (pod) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage on pod {{ $labels.pod }}"
+          description: "CPU usage: {{ $value | humanizePercentage }} (threshold: 80%)"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          container_memory_usage_bytes{namespace="djunion"} > 1073741824  # 1GB
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage on pod {{ $labels.pod }}"
+          description: "Memory usage: {{ $value | humanizeBytes }} (threshold: 1GB)"
+
+      # Pod crash looping
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total{namespace="djunion"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: "Container {{ $labels.container }} has restarted {{ $value }} times in the last 15 minutes"
+          runbook_url: "https://docs.djunion.com/runbooks/pod-crash-looping"
+
+      # Node disk pressure
+      - alert: NodeDiskPressure
+        expr: |
+          kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Node {{ $labels.node }} has disk pressure"
+          description: "Node is experiencing disk pressure"
+
+      # Cluster CPU capacity
+      - alert: ClusterCPUCapacity
+        expr: |
+          (sum(rate(container_cpu_usage_seconds_total{namespace="djunion"}[5m]))
+          / sum(kube_node_status_allocatable_cpu_cores)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High cluster CPU capacity utilization"
+          description: "Cluster CPU utilization: {{ $value }}% (threshold: 85%)"
+
+  # Business Metrics Alerts
+  - name: business_metrics
+    interval: 5m
+    rules:
+      # Unusual user registration spike
+      - alert: UnusualRegistrationSpike
+        expr: |
+          rate(user_registrations_total[5m]) > 10
+        for: 10m
+        labels:
+          severity: info
+          component: business
+        annotations:
+          summary: "Unusual user registration spike"
+          description: "Registration rate: {{ $value }} users/s (threshold: 10 users/s)"
+
+      # No user activity
+      - alert: NoUserActivity
+        expr: |
+          rate(user_logins_total[1h]) == 0
+        for: 1h
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "No user login activity detected"
+          description: "No user logins in the last hour"
+
+      # Subscription payment failures
+      - alert: SubscriptionPaymentFailures
+        expr: |
+          rate(stripe_payment_failed_total[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: monetization
+        annotations:
+          summary: "Subscription payment failures detected"
+          description: "Failure rate: {{ $value }} failures/s"
+
+  # Security Alerts
+  - name: security_alerts
+    interval: 30s
+    rules:
+      # High rate of authentication failures
+      - alert: HighAuthenticationFailureRate
+        expr: |
+          sum(rate(http_requests_total{route="/v1/auth/login",status_code="401"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Failure rate: {{ $value }} failures/s (threshold: 5 failures/s)"
+
+      # Potential brute force attack
+      - alert: PotentialBruteForceAttack
+        expr: |
+          sum(rate(http_requests_total{route="/v1/auth/login",status_code="401"}[1m])) by (remote_addr) > 10
+        for: 2m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Potential brute force attack from {{ $labels.remote_addr }}"
+          description: "Failed login attempts: {{ $value }} attempts/s"
+          runbook_url: "https://docs.djunion.com/runbooks/brute-force-attack"
+
+      # Unusual request pattern
+      - alert: UnusualRequestPattern
+        expr: |
+          sum(rate(http_requests_total[5m])) by (remote_addr) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Unusual request pattern from {{ $labels.remote_addr }}"
+          description: "Request rate: {{ $value }} req/s (threshold: 100 req/s)"
+
+  # Data Consistency Alerts
+  - name: data_consistency
+    interval: 1h
+    rules:
+      # Analytics data gap detected
+      - alert: AnalyticsDataGap
+        expr: |
+          time() - max(analytics_last_aggregation_timestamp) > 86400  # 24 hours
+        for: 1h
+        labels:
+          severity: warning
+          component: analytics
+        annotations:
+          summary: "Analytics data aggregation gap detected"
+          description: "Last aggregation was {{ $value | humanizeDuration }} ago"
+
+      # Stream heartbeat data stale
+      - alert: StreamHeartbeatDataStale
+        expr: |
+          time() - max(stream_heartbeat_last_received) > 300  # 5 minutes
+        for: 5m
+        labels:
+          severity: warning
+          component: analytics
+        annotations:
+          summary: "Stream heartbeat data is stale"
+          description: "Last heartbeat received {{ $value | humanizeDuration }} ago"

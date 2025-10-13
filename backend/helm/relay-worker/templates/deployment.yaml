@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "djunion-relay-worker.fullname" . }}
+  labels:
+    {{- include "djunion-relay-worker.labels" . | nindent 4 }}
+    stream-id: {{ .Values.stream.id | quote }}
+spec:
+  replicas: 1  # Always 1 replica per stream
+  selector:
+    matchLabels:
+      {{- include "djunion-relay-worker.selectorLabels" . | nindent 6 }}
+      stream-id: {{ .Values.stream.id | quote }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "djunion-relay-worker.selectorLabels" . | nindent 8 }}
+        stream-id: {{ .Values.stream.id | quote }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "djunion-relay-worker.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 12 }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 12 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        env:
+        {{- range .Values.env }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        - name: STREAM_ID
+          value: {{ .Values.stream.id | quote }}
+        - name: SHOUTCAST_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "djunion-relay-worker.fullname" . }}-secret
+              key: shoutcast-url
+        - name: SHOUTCAST_MOUNT
+          value: {{ .Values.stream.mount | quote }}
+        - name: STREAM_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "djunion-relay-worker.fullname" . }}-secret
+              key: stream-key
+        - name: API_BASE_URL
+          value: {{ .Values.api.baseUrl | quote }}
+        - name: API_HEARTBEAT_PATH
+          value: {{ .Values.api.heartbeatPath | quote }}
+        - name: S3_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "djunion-relay-worker.fullname" . }}-config
+              key: s3-endpoint
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "djunion-relay-worker.fullname" . }}-secret
+              key: s3-access-key
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "djunion-relay-worker.fullname" . }}-secret
+              key: s3-secret-key
+        - name: S3_BUCKET
+          value: {{ .Values.s3.bucket | quote }}
+        - name: S3_REGION
+          value: {{ .Values.s3.region | quote }}
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "djunion-relay-worker.fullname" . }}-secret
+              key: redis-url
+        volumeMounts:
+        - name: hls-temp
+          mountPath: /tmp/hls
+      volumes:
+      - name: hls-temp
+        emptyDir:
+          sizeLimit: 500Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
