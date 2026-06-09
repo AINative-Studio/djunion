@@ -54,6 +54,17 @@ import {
   ExternalLink
 } from 'lucide-react';
 
+type Show = {
+  id: number;
+  title: string;
+  host: string;
+  time: string;
+  duration: string;
+  type: string;
+  date: string;
+  status: string;
+};
+
 export default function DashboardPage() {
   const [isLive, setIsLive] = useState(false);
   const [currentTrack, setCurrentTrack] = useState({
@@ -66,7 +77,7 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
-  const [selectedShow, setSelectedShow] = useState(null);
+  const [selectedShow, setSelectedShow] = useState<Show | null>(null);
 
   // Simulate real-time listener count updates
   useEffect(() => {
@@ -138,7 +149,7 @@ export default function DashboardPage() {
     { date: "Jan 5", listeners: 167, engagement: 89 }
   ];
 
-  const handleShowAction = (action, show = null) => {
+  const handleShowAction = (action: string, show: Show | null = null) => {
     setModalType(action);
     setSelectedShow(show);
     setShowModal(true);
